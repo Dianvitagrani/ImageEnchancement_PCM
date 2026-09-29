@@ -75,7 +75,6 @@ class AplikasiCitra(QtWidgets.QDialog):
         label.setFont(font)
         frame.layout().addWidget(label)
 
-
     def hitung_mse_rgb_manual(self, img_asli, img_filter):
         asli_float = img_asli.astype(np.float64)
         filter_float = img_filter.astype(np.float64)
@@ -114,6 +113,33 @@ class AplikasiCitra(QtWidgets.QDialog):
             
         return img_hasil
 
+    #FUNCTION IMAGE NEGATIVE
+    def proses_image_negative(self, img_rgb):
+        return 255 - img_rgb
+
+    #FUNCTION CONTRAST STRETCHING
+    def proses_contrast_stretching(self, img_rgb):
+        img_float = img_rgb.astype(np.float64)
+        min_val = np.min(img_float)
+        max_val = np.max(img_float)
+        if max_val - min_val == 0:
+            return img_rgb
+        stretched = (img_float - min_val) * (255.0 / (max_val - min_val))
+        return np.clip(stretched, 0, 255).astype(np.uint8)
+
+    #FUNCTION HISTOGRAM EQUALIZATION
+    def proses_histogram_equalization(self, img_rgb):
+        hasil_he = np.zeros_like(img_rgb)
+        for c in range(3):
+            channel = img_rgb[:, :, c]
+            hist, _ = np.histogram(channel.flatten(), 256, [0, 256])
+            cdf = hist.cumsum()
+            cdf_m = np.ma.masked_equal(cdf, 0)
+            cdf_m = (cdf_m - cdf_m.min()) * 255 / (cdf_m.max() - cdf_m.min())
+            cdf = np.ma.filled(cdf_m, 0).astype('uint8')
+            hasil_he[:, :, c] = cdf[channel]
+        return hasil_he
+
     #TABSHEETS 1
     def upload_gambar(self):
         file_name, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Upload Files", "", "Image Files (*.jpg *.png *.jpeg *.bmp)")
@@ -136,9 +162,18 @@ class AplikasiCitra(QtWidgets.QDialog):
         if self.img_rgb is None: 
             return QtWidgets.QMessageBox.warning(self, "You need to Upload the File First")
             
-        img_float = self.img_rgb.astype(float) / 255.0
-        processed = exposure.equalize_adapthist(img_float, clip_limit=0.01)
-        self.img_ahe = np.clip(processed * 255, 0, 255).astype(np.uint8)
+        pilihan = self.combo_enchancement.currentText().lower()
+            
+        if "negative" in pilihan:
+            self.img_ahe = self.proses_image_negative(self.img_rgb)
+        elif "stretching" in pilihan:
+            self.img_ahe = self.proses_contrast_stretching(self.img_rgb)
+        elif "equalization" in pilihan and "adaptive" not in pilihan and "ahe" not in pilihan:
+            self.img_ahe = self.proses_histogram_equalization(self.img_rgb)
+        else:
+            img_float = self.img_rgb.astype(float) / 255.0
+            processed = exposure.equalize_adapthist(img_float, clip_limit=0.01)
+            self.img_ahe = np.clip(processed * 255, 0, 255).astype(np.uint8)
         
         self.tampilkan_gambar_ke_frame(self.img_rgb, self.frame_2)
         self.tampilkan_gambar_ke_frame(self.img_ahe, self.frame_4)
@@ -168,10 +203,18 @@ class AplikasiCitra(QtWidgets.QDialog):
             self.btn_jalankan_filter.setEnabled(False) 
             QtWidgets.QApplication.processEvents() 
             
-            #Enchance Raw Image (AHE)
-            img_float = self.img_rgb.astype(float) / 255.0
-            processed = exposure.equalize_adapthist(img_float, clip_limit=0.01)
-            hasil_ahe_awal = np.clip(processed * 255, 0, 255).astype(np.uint8)
+            pilihan = self.combo_enchancement.currentText().lower()
+                
+            if "negative" in pilihan:
+                hasil_ahe_awal = self.proses_image_negative(self.img_rgb)
+            elif "stretching" in pilihan:
+                hasil_ahe_awal = self.proses_contrast_stretching(self.img_rgb)
+            elif "equalization" in pilihan and "adaptive" not in pilihan and "ahe" not in pilihan:
+                hasil_ahe_awal = self.proses_histogram_equalization(self.img_rgb)
+            else:
+                img_float = self.img_rgb.astype(float) / 255.0
+                processed = exposure.equalize_adapthist(img_float, clip_limit=0.01)
+                hasil_ahe_awal = np.clip(processed * 255, 0, 255).astype(np.uint8)
             
             #Apply Filter
             hasil_filter = self.terapkan_filter_rgb_manual(hasil_ahe_awal, ukuran_kernel, tipe_filter)
